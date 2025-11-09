@@ -61,7 +61,7 @@ class InfinityPortal(Portal):
     comms_def = InfinityCommsDefinition()
 
     def __init__(self, serial: str | None = None):
-        super().__init__(InfinityComms(serial))
+        super().__init__(InfinityComms(serial), False)
 
     async def connect(self):
         await super().connect()

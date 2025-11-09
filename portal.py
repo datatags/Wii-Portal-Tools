@@ -134,6 +134,8 @@ class Comms(ABC):
     def _check_for_error(self, code: int):
         if code == ErrorType.SUCCESS.value:
             return # yay!
+        # Mask out some of the upper bits since LD sets them but DI doesn't
+        code &= 0x8F
         try:
             error = ErrorType(code)
         except ValueError:
@@ -144,9 +146,17 @@ class Comms(ABC):
 class Portal(ABC):
     comms_def: CommsDefinition
 
-    def __init__(self, comms: Comms):
+    def __init__(self, comms: Comms, has_nfc_sectors: bool):
+        """
+        Parameters:
+
+        comms -- Communications implementation to use
+        has_nfc_sectors -- Whether the base uses a sector parameter for NFC commands
+                           (i.e. designed for Mifare Classic, like DI is)
+        """
         self.comms = comms
         self.comms.add_observer(self)
+        self.has_nfc_sectors = has_nfc_sectors
         self.on_tags_changed = None
 
     async def connect(self):
@@ -224,25 +234,41 @@ class Portal(ABC):
         """
         await self.comms.send_message(CommandType.RANDOM_ONE, [int(platform), duration, count])
 
-    async def read_tag(self, tag: Tag, sector: int, offset: int = 0) -> bytes:
+    async def read_tag(self, tag: Tag, block: int) -> bytes:
         """Read a data block from the tag.
 
-        The actual block read is `(sector * 4) + offset`, and there don't
-        appear to be any artificial limits on the parameters, e.g. using
-        sector=0 offset=14 works just as well as sector=3 offset=2
+        Note: 16 bytes will always be returned, so on tags that have 4-byte blocks like the NTAG,
+        the three subsequent blocks will also be read to fill out the response.
 
         Keyword arguments:
         tag -- the tag to read from
-        sector -- the sector to read from
-        offset -- the offset within the sector to read
+        block -- the block to read from
         """
-        data = await self.comms.send_message(CommandType.READ_BLOCK, [tag.index, sector, offset])
+        msg = [tag.index]
+        if self.has_nfc_sectors:
+            msg.append(block // 4)
+            block %= 4
+        msg.append(block)
+        data = await self.comms.send_message(CommandType.READ_BLOCK, msg)
         self.comms._check_for_error(data[0])
         return data[1:]
 
-    async def write_tag(self, tag: Tag, sector: int, data: bytes, offset: int = 0):
-        """Write a data block to the tag. See `read_tag` for more info."""
-        data = await self.comms.send_message(CommandType.WRITE_BLOCK, [tag.index, sector, offset] + list(data))
+    async def write_tag(self, tag: Tag, block: int, data: bytes):
+        """Write a data block to the tag.
+
+        In this case, the block size does matter, so the length of `data` must match the block size
+        of the tag.
+
+        Keyword arguments:
+        tag -- the tag to read from
+        block -- the block to read from
+        """
+        msg = [tag.index]
+        if self.has_nfc_sectors:
+            msg.append(block // 4)
+            block %= 4
+        msg.append(block)
+        data = await self.comms.send_message(CommandType.WRITE_BLOCK, msg + list(data))
         self.comms._check_for_error(data[0])
 
     async def set_auth(self, mode: AuthMode, pwd: bytes = b"\0\0\0\0"):
@@ -251,6 +277,10 @@ class Portal(ABC):
             msg.extend(list(pwd))
         data = await self.comms.send_message(CommandType.TAG_PWD, msg)
         self.comms._check_for_error(data[0])
+
+    async def set_nfc_enabled(self, enabled: bool):
+        await self.comms.send_message(CommandType.NFC_ON, [enabled])
+        # no data returned so no error check
 
     @classmethod
     def enumerate(cls) -> list: # returns list of self

@@ -61,5 +61,5 @@ class LegoPortal(Portal):
     comms_def = LegoCommsDefinition()
 
     def __init__(self, serial: str | None = None):
-        super().__init__(LegoComms(serial))
+        super().__init__(LegoComms(serial), False)
 
