@@ -40,6 +40,16 @@ class InfinityCommsDefinition(CommsDefinition):
         """USB VID and PID for the device"""
         return 0x0e6f, 0x0129
 
+    @classmethod
+    def has_nfc_sectors(cls) -> bool:
+        """Whether the base uses a sector parameter for NFC commands (i.e. designed for Mifare Classic, like DI is)"""
+        return True
+
+    @classmethod
+    def ticks_per_second(cls) -> int:
+        """Number of 'ticks', i.e. the number to put in the duration field to get 1 second"""
+        return 16
+
 
 class InfinityComms(Comms):
     comms_def = InfinityCommsDefinition()
@@ -61,7 +71,7 @@ class InfinityPortal(Portal):
     comms_def = InfinityCommsDefinition()
 
     def __init__(self, serial: str | None = None):
-        super().__init__(InfinityComms(serial), False)
+        super().__init__(InfinityComms(serial))
 
     async def connect(self):
         await super().connect()

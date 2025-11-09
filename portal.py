@@ -146,17 +146,9 @@ class Comms(ABC):
 class Portal(ABC):
     comms_def: CommsDefinition
 
-    def __init__(self, comms: Comms, has_nfc_sectors: bool):
-        """
-        Parameters:
-
-        comms -- Communications implementation to use
-        has_nfc_sectors -- Whether the base uses a sector parameter for NFC commands
-                           (i.e. designed for Mifare Classic, like DI is)
-        """
+    def __init__(self, comms: Comms):
         self.comms = comms
         self.comms.add_observer(self)
-        self.has_nfc_sectors = has_nfc_sectors
         self.on_tags_changed = None
 
     async def connect(self):
@@ -201,38 +193,42 @@ class Portal(ABC):
         """
         await self.comms.send_message(CommandType.SET_ONE, [int(platform), *color])
 
-    async def fade_color(self, platform: int | Platform, color: Color, duration: int = 0x10, count: int = 2):
+    async def fade_color(self, platform: int | Platform, color: Color, duration: float = 1.0, count: int = 2):
         """Fade a platform color in and out according to the parameters.
 
         Arguments:
         platform -- the platform to control
         color -- the color to make the platform
-        duration -- the duration of the cycle in 1/16-second increments. 16 = 0x10 = 1 second
+        duration -- the duration of the cycle in seconds
         count -- the number of half-cycles to perform, e.g. 1 is off-to-on, 2 is off-on-off, etc
         """
-        await self.comms.send_message(CommandType.FADE_ONE, [int(platform), duration, count, *color])
+        d = int(self.comms_def.ticks_per_second() * duration)
+        await self.comms.send_message(CommandType.FADE_ONE, [int(platform), d, count, *color])
 
-    async def flash_color(self, platform: int | Platform, color: Color, onTime: int = 0x02, offTime: int = 0x02, count: int = 0x06):
+    async def flash_color(self, platform: int | Platform, color: Color, onTime: float = 0.2, offTime: float = 0.2, count: int = 0x06):
         """Flash a platform on and off
 
         Arguments:
         platform -- the platform to control
         color -- the color to make the platform
-        onTime -- the duration of each on-cycle in 1/16-second increments. 16 = 0x10 = 1 second
-        offTime -- the duration of each off-cycle in 1/16 second increments. 16 = 0x10 = 1 second
+        onTime -- the duration of each on-cycle in seconds
+        offTime -- the duration of each off-cycle in seconds
         count -- the number of half-cycles to perform, e.g. 1 is off-to-on, 2 is off-on-off, etc
         """
-        await self.comms.send_message(CommandType.FLASH_ONE, [int(platform), onTime, offTime, count, *color])
+        on = int(self.comms_def.ticks_per_second() * onTime)
+        off = int(self.comms_def.ticks_per_second() * offTime)
+        await self.comms.send_message(CommandType.FLASH_ONE, [int(platform), on, off, count, *color])
 
-    async def fade_random(self, platform: int | Platform, duration: int = 0x10, count: int = 0x02):
+    async def fade_random(self, platform: int | Platform, duration: float = 1.0, count: int = 0x02):
         """Fade a platform between its current color and random other colors
 
         Arguments:
         platform -- the platform to control
-        onTime -- the duration of each on-cycle in 1/16-second increments. 16 = 0x10 = 1 second
+        duration -- the duration of each half-cycle in seconds
         count -- the number of half-cycles to perform, e.g. 1 is src-to-dest, 2 is src-dest-src, etc
         """
-        await self.comms.send_message(CommandType.RANDOM_ONE, [int(platform), duration, count])
+        d = int(self.comms_def.ticks_per_second() * duration)
+        await self.comms.send_message(CommandType.RANDOM_ONE, [int(platform), d, count])
 
     async def read_tag(self, tag: Tag, block: int) -> bytes:
         """Read a data block from the tag.
@@ -245,7 +241,9 @@ class Portal(ABC):
         block -- the block to read from
         """
         msg = [tag.index]
-        if self.has_nfc_sectors:
+        if self.comms_def.has_nfc_sectors():
+            # Technically we could just do sector=0 and leave block unchanged
+            # but this seems more like how it was designed to be used.
             msg.append(block // 4)
             block %= 4
         msg.append(block)
@@ -264,7 +262,7 @@ class Portal(ABC):
         block -- the block to read from
         """
         msg = [tag.index]
-        if self.has_nfc_sectors:
+        if self.comms_def.has_nfc_sectors():
             msg.append(block // 4)
             block %= 4
         msg.append(block)
@@ -272,7 +270,7 @@ class Portal(ABC):
         self.comms._check_for_error(data[0])
 
     async def set_auth(self, mode: AuthMode, pwd: bytes = b"\0\0\0\0"):
-        msg = [84, mode] # 84 is the tag index...
+        msg = [84, mode] # 84 is the tag index. I guess. This is what node-ld does
         if mode == AuthMode.CUSTOM:
             msg.extend(list(pwd))
         data = await self.comms.send_message(CommandType.TAG_PWD, msg)

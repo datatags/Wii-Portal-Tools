@@ -41,6 +41,16 @@ class LegoCommsDefinition(CommsDefinition):
         """USB VID and PID for the device"""
         return 0x0e6f, 0x0241
 
+    @classmethod
+    def has_nfc_sectors(cls) -> bool:
+        """Whether the base uses a sector parameter for NFC commands (i.e. designed for Mifare Classic, like DI is)"""
+        return False
+
+    @classmethod
+    def ticks_per_second(cls) -> int:
+        """Number of 'ticks', i.e. the number to put in the duration field to get 1 second"""
+        return 12 # I just eyeballed this next to the DI base
+
 
 class LegoComms(Comms):
     comms_def = LegoCommsDefinition()
@@ -61,5 +71,5 @@ class LegoPortal(Portal):
     comms_def = LegoCommsDefinition()
 
     def __init__(self, serial: str | None = None):
-        super().__init__(LegoComms(serial), False)
+        super().__init__(LegoComms(serial))
 

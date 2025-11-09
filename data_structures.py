@@ -126,3 +126,15 @@ class CommsDefinition(ABC):
     def vid_pid(cls) -> tuple[int, int]:
         """USB VID and PID for the device"""
         pass
+
+    @classmethod
+    @abstractmethod
+    def has_nfc_sectors(cls) -> bool:
+        """Whether the base uses a sector parameter for NFC commands (i.e. designed for Mifare Classic, like DI is)"""
+        pass
+
+    @classmethod
+    @abstractmethod
+    def ticks_per_second(cls) -> int:
+        """Number of 'ticks', i.e. the number to put in the duration field to get 1 second"""
+        pass

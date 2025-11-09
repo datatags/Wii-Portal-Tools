@@ -21,9 +21,6 @@ async def run_base(base: Portal):
     is_lego = isinstance(base, LegoPortal)
 
     async def on_change(event: TagChangeEvent):
-        if event.tag.platform == 1:
-            return
-
         tags = await base.get_all_tags()
         color = off
         count = len(tags.get(event.tag.platform, []))
@@ -108,9 +105,8 @@ async def run_base(base: Portal):
 
     await asyncio.sleep(3)
 
-    # TODO: investigate why timings are slightly different between DI and LD
-    await base.fade_random(2, 0x10, 0x11)
-    await base.flash_color(3, blue, 0x8, 0x8, 9)
+    await base.fade_random(2, 1, 21)
+    await base.flash_color(3, blue, 0.5, 0.5, 9)
 
     await base.comms_task # sleep forever
 
